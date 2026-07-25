@@ -4,315 +4,116 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LORA - نظام إدارة المخزون السحابي</title>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js";
+        import { getDatabase, ref, set, get, update, remove, onValue } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-database.js";
 
-    <style>
-        :root {
-            --primary: #0f766e;
-            --primary-light: #14b8a6;
-            --bg-color: #f3f4f6;
-            --card-bg: #ffffff;
-            --border: #e5e7eb;
-            --success: #10b981;
-            --danger: #ef4444;
-            --text-main: #1f2937;
-            --category-bg: #f8fafc;
-        }
+        const firebaseConfig = {
+            apiKey: "AIzaSyCefZIo28B7yhL4mEIQcZgumAJictvN1-I",
+            authDomain: "lora-inventory-85f26.firebaseapp.com",
+            databaseURL: "https://lora-inventory-85f26-default-rtdb.firebaseio.com",
+            projectId: "lora-inventory-85f26",
+            storageBucket: "lora-inventory-85f26.firebasestorage.app",
+            messagingSenderId: "525594981482",
+            appId: "1:525594981482:web:6f1afb43785df642084613",
+            measurementId: "G-5NDWCBNHB5"
+        };
 
-        body { font-family: 'Cairo', sans-serif; background-color: var(--bg-color); margin: 0; padding: 20px; color: var(--text-main); }
-        .header { text-align: center; margin-bottom: 20px; }
-        .header h1 { color: var(--primary); margin: 0; font-size: 24px; }
-        
-        .container { max-width: 1100px; margin: 0 auto; }
-        .card { background: var(--card-bg); border-radius: 12px; padding: 25px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; border-top: 5px solid var(--primary); }
-        
-        /* Authentication */
-        #authSection { max-width: 400px; margin: 50px auto; text-align: center; }
-        input, select { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; font-size: 14px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background-color: var(--primary); color: white; border: none; border-radius: 8px; font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.3s; margin-bottom: 10px; }
-        button:hover { background-color: var(--primary-light); }
-        .btn-secondary { background-color: #4b5563; }
-        .btn-secondary:hover { background-color: #374151; }
-        .btn-danger { background-color: var(--danger); width: auto; padding: 8px 15px; font-size: 13px; }
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
 
-        #appSection, #adminPanel, #workerPanel { display: none; }
-        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
-        
-        /* Tables */
-        table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 15px; }
-        th, td { padding: 12px; text-align: right; border-bottom: 1px solid var(--border); }
-        th { background-color: var(--category-bg); color: #475569; }
-        .category-row { background-color: #e2e8f0; font-weight: bold; color: var(--primary); text-align: center; }
-        .stock-level { font-weight: 700; font-size: 15px; }
-
-        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; color: white; }
-        .badge.add { background-color: var(--success); }
-        .badge.sub { background-color: var(--danger); }
-        .badge.set { background-color: #3b82f6; }
-        
-        optgroup { font-weight: bold; color: var(--primary); }
-    </style>
+        window.firebaseAuth = { auth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut };
+        window.firebaseDb = { db, ref, set, get, update, remove, onValue };
+    </script>
 </head>
-<body>
-
-    <div class="header">
-        <h1>شركة هاشم إبراهيم الشاوي التجارية (LORA)</h1>
-        <p>النظام السحابي اللحظي للمخزون والتكاليف</p>
-    </div>
-
-    <!-- شاشة الدخول -->
-    <div id="authSection" class="card">
-        <h2>تسجيل الدخول للنظام</h2>
-        <input type="email" id="email" placeholder="البريد الإلكتروني (مثال: admin@lora.com)">
-        <input type="password" id="password" placeholder="كلمة المرور">
-        <button onclick="login()">دخول</button>
-        <button class="btn-secondary" onclick="register()">تسجيل حساب موظف جديد</button>
-        <p id="authError" style="color: red; font-size: 13px;"></p>
-    </div>
-
-    <!-- النظام -->
-    <div id="appSection" class="container">
-        <div class="card top-bar">
-            <div style="font-weight: 600; color: var(--primary);">المستخدم الحالي: <span id="currentUser"></span></div>
-            <button class="btn-danger" onclick="logout()">تسجيل الخروج</button>
-        </div>
-
-        <!-- شاشة أمين المخزن -->
-        <div id="workerPanel" class="card">
-            <h3 style="margin-top: 0; color: var(--primary);">📦 واجهة إدخال الحركات والجرد</h3>
-            <label>اختر الصنف:</label>
-            <select id="itemSelect"></select>
+<body class="bg-gray-50 font-sans">
+    <div id="app" class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
+            <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">LORA - نظام إدارة المخزون</h1>
             
-            <label>نوع الحركة:</label>
-            <select id="actionType">
-                <option value="add">➕ وارد (إضافة للمخزن)</option>
-                <option value="sub">➖ منصرف (سحب من المخزن)</option>
-                <option value="set">📝 تسوية جرد (الرصيد الفعلي الآن)</option>
-            </select>
-            
-            <label>الكمية:</label>
-            <input type="number" id="qtyInput" placeholder="أدخل الكمية..." min="1">
-            <button onclick="submitTransaction()">تسجيل الحركة</button>
-        </div>
-
-        <!-- شاشة الإدارة والمراجعة -->
-        <div id="adminPanel">
-            <div class="card" style="border-top-color: #3b82f6;">
-                <h3 style="margin-top: 0; color: #3b82f6;">📊 شاشة الإدارة والمراجعة (الأرصدة الحالية)</h3>
-                <table id="inventoryTable">
-                    <thead>
-                        <tr>
-                            <th>الصنف</th>
-                            <th>الرصيد المتاح</th>
-                        </tr>
-                    </thead>
-                    <tbody id="inventoryBody"></tbody>
-                </table>
+            <!-- شاشة تسجيل الدخول -->
+            <div id="login-container">
+                <input type="email" id="email" placeholder="البريد الإلكتروني" class="w-full p-3 mb-4 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
+                <input type="password" id="password" placeholder="كلمة المرور" class="w-full p-3 mb-4 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
+                <button onclick="handleLogin()" class="w-full bg-indigo-600 text-white p-3 rounded-xl font-semibold hover:bg-indigo-700 transition">تسجيل الدخول</button>
             </div>
 
-            <div class="card" style="border-top-color: #8b5cf6;">
-                <h3 style="margin-top: 0; color: #8b5cf6;">🕒 سجل الحركات التفصيلي</h3>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>التاريخ والوقت</th>
-                            <th>الموظف</th>
-                            <th>الصنف</th>
-                            <th>العملية</th>
-                            <th>الكمية</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logsBody"></tbody>
-                </table>
+            <!-- لوحة التحكم -->
+            <div id="dashboard" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <span id="user-role-badge" class="px-3 py-1 text-xs rounded-full font-bold"></span>
+                    <span id="user-email-display" class="text-sm text-gray-500"></span>
+                </div>
+
+                <div class="p-4 bg-gray-50 rounded-xl mb-4 border border-gray-200">
+                    <p class="text-gray-700 font-medium mb-2">حالة النظام: متصل بالسحابة 🟢</p>
+                    
+                    <!-- أزرار تتحكم فيها الصلاحيات -->
+                    <div id="admin-controls" class="hidden space-y-2 mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-xs text-indigo-600 font-bold mb-1">لوحة تحكم المدير (صلاحيات كاملة):</p>
+                        <button onclick="alert('تم تنفيذ إجراء إداري (حذف/تعديل)')" class="w-full bg-red-600 text-white p-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition">إدارة وحذف الحركات</button>
+                    </div>
+
+                    <div id="employee-controls" class="hidden mt-4 pt-4 border-t border-gray-200">
+                        <p class="text-xs text-gray-500">مرحباً بك، يمكنك إدخال البيانات المعتمدة فقط.</p>
+                    </div>
+                </div>
+
+                <button onclick="handleLogout()" class="w-full bg-gray-600 text-white p-3 rounded-xl font-semibold hover:bg-gray-700 transition">تسجيل الخروج</button>
             </div>
         </div>
     </div>
 
     <script>
-        // ==========================================
-        // 1. إعدادات Firebase (ضع مفاتيحك هنا لاحقاً)
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-            projectId: "YOUR_PROJECT_ID"
-        };
-        
-        if(firebaseConfig.apiKey !== "YOUR_API_KEY") {
-            firebase.initializeApp(firebaseConfig);
-        }
-
-        // ==========================================
-        // 2. قاعدة بيانات الأصناف مقسمة لمجموعات تكاليف
-        // ==========================================
-        const inventoryCategories = {
-            "الصوابين الجاهزة (LORA)": [
-                "صابون شجرة الشاي", "صابون إكليل الجبل", "صابون الفل", "صابون الليمون", 
-                "صابون السدر", "صابون البرتقال", "صابون القهوة", "صابون الياسمين", 
-                "صابون الزعفران", "صابون الورد الطائفي", "صابون الزيتون", "صابون العود", 
-                "صابون الهيل", "صابون العنبر", "صابون القرفة", "صابون المسك الأبيض", 
-                "صابون الكادي الطبيعي", "صابون الخزامى"
-            ],
-            "الزيوت الخام (مواد أولية)": [
-                "زيت زيتون بكر (لتر)", "زيت جوز الهند (لتر)", "زيت الخروع (لتر)", 
-                "زيت النخيل (لتر)", "زيت اللوز الحلو (لتر)", "زبدة الشيا (كجم)"
-            ],
-            "الزيوت العطرية": [
-                "عطر الورد الطائفي (مل)", "عطر اللافندر (مل)", "عطر العود (مل)", 
-                "عطر المسك (مل)", "عطر الليمون (مل)", "عطر إكليل الجبل (مل)"
-            ],
-            "مواد التغليف والتعبئة": [
-                "كراتين لورا - مقاس صغير (قطعة)", "كراتين لورا - مقاس كبير (قطعة)", 
-                "ورق تغليف داخلي كرافت (قطعة)", "ستيكر لاصق / ليبل (قطعة)", 
-                "أكياس شحن (قطعة)"
-            ]
-        };
-
-        // بناء القائمة المنسدلة مقسمة لمجموعات
-        const select = document.getElementById('itemSelect');
-        for (const [category, items] of Object.entries(inventoryCategories)) {
-            let optgroup = document.createElement('optgroup');
-            optgroup.label = category;
-            items.forEach(prod => {
-                let opt = document.createElement('option');
-                opt.value = prod; opt.textContent = prod;
-                optgroup.appendChild(opt);
-            });
-            select.appendChild(optgroup);
-        }
-
-        // ==========================================
-        // 3. نظام الصلاحيات والتسجيل
-        // ==========================================
-        const ADMIN_EMAIL = "admin@lora.com"; // الإيميل الذي يرى شاشة المراجعة المالية
-        let currentUserEmail = "";
-
-        function register() {
-            const e = document.getElementById('email').value;
-            const p = document.getElementById('password').value;
-            if(!firebase.apps.length) return alert("يرجى ربط مفاتيح Firebase أولاً.");
-            firebase.auth().createUserWithEmailAndPassword(e, p)
-                .then(() => alert("تم إنشاء الحساب بنجاح!"))
-                .catch(err => document.getElementById('authError').innerText = err.message);
-        }
-
-        function login() {
-            const e = document.getElementById('email').value;
-            const p = document.getElementById('password').value;
-            if(!firebase.apps.length) return mockLogin(e); // للتجربة قبل الربط
-            firebase.auth().signInWithEmailAndPassword(e, p)
-                .catch(err => document.getElementById('authError').innerText = "بيانات غير صحيحة");
-        }
-
-        function logout() {
-            if(firebase.apps.length) firebase.auth().signOut();
-            else window.location.reload();
-        }
-
-        if(firebase.apps.length) {
-            firebase.auth().onAuthStateChanged(user => {
-                user ? showApp(user.email) : hideApp();
-            });
-        }
-
-        function mockLogin(email) {
-            if(!email) return alert("للتجربة: ادخل أي إيميل. لتجربة الإدارة ادخل admin@lora.com");
-            showApp(email);
-        }
-
-        function showApp(email) {
-            currentUserEmail = email;
-            document.getElementById('authSection').style.display = 'none';
-            document.getElementById('appSection').style.display = 'block';
-            document.getElementById('currentUser').innerText = email;
-
-            document.getElementById('workerPanel').style.display = 'block';
-            if(email === ADMIN_EMAIL || email.includes("admin")) {
-                document.getElementById('adminPanel').style.display = 'block';
-            }
-
-            if(firebase.apps.length) loadRealtimeData();
-            else renderMockTable(); // عرض تجريبي للجدول
-        }
-
-        function hideApp() {
-            document.getElementById('authSection').style.display = 'block';
-            document.getElementById('appSection').style.display = 'none';
-        }
-
-        // ==========================================
-        // 4. تسجيل الحركات وجلب البيانات
-        // ==========================================
-        function submitTransaction() {
-            const item = document.getElementById('itemSelect').value;
-            const type = document.getElementById('actionType').value;
-            const qty = parseInt(document.getElementById('qtyInput').value);
-
-            if (!qty || qty <= 0) return alert("أدخل كمية صحيحة!");
-            if (!firebase.apps.length) return alert(`(محاكاة) تم تسجيل: ${type} ${qty} لـ ${item}`);
-
-            const db = firebase.database();
-            db.ref('inventory/' + item).transaction(currentQty => {
-                let current = currentQty || 0;
-                if(type === 'add') return current + qty;
-                if(type === 'sub') return current - qty < 0 ? current : current - qty;
-                if(type === 'set') return qty;
-            }).then(() => {
-                db.ref('logs').push({
-                    item: item, type: type, qty: qty, 
-                    user: currentUserEmail, timestamp: new Date().toLocaleString('ar-EG')
-                });
-                document.getElementById('qtyInput').value = '';
-                alert("تم التسميع في الدفاتر بنجاح!");
-            });
-        }
-
-        function loadRealtimeData() {
-            const db = firebase.database();
-            
-            db.ref('inventory').on('value', snap => {
-                const data = snap.val() || {};
-                const tbody = document.getElementById('inventoryBody');
-                tbody.innerHTML = '';
+        setTimeout(() => {
+            if (window.firebaseAuth) {
+                const { auth, signInWithEmailAndPassword, onAuthStateChanged, signOut } = window.firebaseAuth;
                 
-                for (const [category, items] of Object.entries(inventoryCategories)) {
-                    tbody.innerHTML += `<tr><td colspan="2" class="category-row">${category}</td></tr>`;
-                    items.forEach(prod => {
-                        let qty = data[prod] || 0;
-                        let color = qty < 20 ? 'color: red;' : 'color: green;';
-                        tbody.innerHTML += `<tr><td>${prod}</td><td class="stock-level" style="${color}">${qty}</td></tr>`;
-                    });
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        document.getElementById('login-container').classList.add('hidden');
+                        document.getElementById('dashboard').classList.remove('hidden');
+                        document.getElementById('user-email-display').innerText = user.email;
+
+                        // التحقق من الصلاحيات بناءً على الإيميل
+                        const adminControls = document.getElementById('admin-controls');
+                        const employeeControls = document.getElementById('employee-controls');
+                        const roleBadge = document.getElementById('user-role-badge');
+
+                        if (user.email === 'admin@lora.com') {
+                            // صلاحيات المدير الكاملة
+                            adminControls.classList.remove('hidden');
+                            employeeControls.classList.add('hidden');
+                            roleBadge.innerText = 'مدير النظام (Admin)';
+                            roleBadge.className = 'px-3 py-1 text-xs rounded-full font-bold bg-purple-100 text-purple-700';
+                        } else {
+                            // صلاحيات الموظف العادي
+                            adminControls.classList.add('hidden');
+                            employeeControls.classList.remove('hidden');
+                            roleBadge.innerText = 'موظف (Employee)';
+                            roleBadge.className = 'px-3 py-1 text-xs rounded-full font-bold bg-blue-100 text-blue-700';
+                        }
+                    } else {
+                        document.getElementById('login-container').classList.remove('hidden');
+                        document.getElementById('dashboard').classList.add('hidden');
+                    }
+                });
+
+                window.handleLogin = function() {
+                    const email = document.getElementById('email').value;
+                    const pass = document.getElementById('password').value;
+                    signInWithEmailAndPassword(auth, email, pass).catch(err => alert("خطأ في تسجيل الدخول: " + err.message));
                 }
-            });
 
-            db.ref('logs').limitToLast(50).on('value', snap => {
-                const logs = [];
-                snap.forEach(child => { logs.push(child.val()); });
-                const tbody = document.getElementById('logsBody');
-                tbody.innerHTML = '';
-                logs.reverse().forEach(log => {
-                    let badgeClass = log.type;
-                    let badgeText = log.type === 'add' ? 'وارد' : (log.type === 'sub' ? 'منصرف' : 'تسوية');
-                    tbody.innerHTML += `<tr><td dir="ltr">${log.timestamp}</td><td>${log.user}</td><td>${log.item}</td><td><span class="badge ${badgeClass}">${badgeText}</span></td><td style="font-weight:bold;">${log.qty}</td></tr>`;
-                });
-            });
-        }
-
-        function renderMockTable() {
-            const tbody = document.getElementById('inventoryBody');
-            tbody.innerHTML = '';
-            for (const [category, items] of Object.entries(inventoryCategories)) {
-                tbody.innerHTML += `<tr><td colspan="2" class="category-row">${category}</td></tr>`;
-                items.forEach(prod => {
-                    tbody.innerHTML += `<tr><td>${prod}</td><td class="stock-level" style="color: gray;">0 (بيانات تجريبية)</td></tr>`;
-                });
+                window.handleLogout = function() {
+                    signOut(auth);
+                }
             }
-        }
+        }, 1000);
     </script>
 </body>
 </html>
